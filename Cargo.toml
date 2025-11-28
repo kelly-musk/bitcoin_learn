@@ -1,0 +1,31 @@
+[package]
+name = "bitcoin_learn"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bitcoin = "0.32.7"
+bitcoincore-rpc = "0.19.0"
+ciborium = "0.2.2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_cbor = "0.11.2"
+serde_json = "1.0.145"
+serde_toml = "0.0.1"
+serde_yaml = "0.9.34"
+sha256 = "1.6.0"
+toml = "0.9.8"
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
+uint = "0.9.5"
+chrono = { version = "0.4.42", features = ["serde"] }
+ecdsa = { version = "0.16.9", features = ["signing", "verifying", "serde", "pem"] }
+k256 = { version = "0.13.4", features = ["serde", "pem"] }
+hex = "0.4.3"
+
+[workspace]
+resolver ="2"
+members = [
+    "lib",
+    "miner",
+    "node",
+    "wallet"
+]

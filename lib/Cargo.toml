@@ -1,0 +1,18 @@
+[package]
+name = "lib"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+uint = "0.9.5"
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
+chrono = { version = "0.4.42", features = ["serde"] }
+ecdsa = { version = "0.16", features = ["signing", "verifying", "serde", "pem"] }
+k256 = { version = "0.13.4", features = ["serde", "pem"] }
+hex = "0.4.3"
+sha256 = "1.6.0"
+serde = { version = "1.0.228", features = ["derive"] }
+ciborium = "0.2.2"
+bytes = "1.11.0"
+rand = "0.8"
+rand_core = "0.6"

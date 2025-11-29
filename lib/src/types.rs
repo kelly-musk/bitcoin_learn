@@ -21,9 +21,9 @@ pub struct BlockHeader {
     /// Nonce used to mine block
     pub nonce: u64,
     /// Hash of the prev block
-    pub prev_block_hash: [u8; 32],
+    pub prev_block_hash: Hash,
     /// Markl root of the block transaction
-    pub markle_root: [u8; 32],
+    pub markle_root: MerkleRoot,
     /// Target
     pub target: U256,
 }
@@ -34,15 +34,15 @@ pub struct Transaction {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct TransactionInput {
+pub struct TransactionOutput {
     pub value: u64,
     pub unique_id: Uuid,
     pub public_key: PublicKey,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct TransactionOutput {
-    pub prev_transaction_output_hash: [u8; 32],
+pub struct TransactionInput {
+    pub prev_transaction_output_hash: Hash,
     pub signature: Signature,
 }
 
@@ -72,8 +72,8 @@ impl BlockHeader {
     pub fn new(
         timestamp: DateTime<Utc>,
         nonce: u64,
-        prev_block_hash: [u8; 32],
-        markle_root: [u8; 32],
+        prev_block_hash: Hash,
+        markle_root: MerkleRoot,
         target: U256,
     ) -> Self {
         BlockHeader {
@@ -85,8 +85,8 @@ impl BlockHeader {
         }
     }
 
-    pub fn hash(&self) -> ! {
-        todo!()
+    pub fn hash(&self) -> Hash {
+        Hash::hash(self)
     }
 }
 
@@ -97,7 +97,13 @@ impl Transaction {
             outputs: outputs,
         }
     }
-    pub fn hash() -> ! {
-        todo!()
+    pub fn hash(&self) -> Hash {
+        Hash::hash(self)
+    }
+}
+
+impl TransactionOutput {
+    pub fn hash(&self) -> Hash {
+        Hash::hash(self)
     }
 }

@@ -7,12 +7,27 @@ construct_uint! {
     pub struct U256(4);
 }
 // initial reward in bitcoin - multiply by 10^8 to get satoshis
-pub const INITIAL_REWARD = 50;
+pub const INITIAL_REWARD: u64 = 50;
+// halving interval in blocks
+pub const HALVING_INTERVAL: u64 = 210;
+// ideal block time in seconds
+pub const IDEAL_BLOCK_TIME: u64 = 10;
+// minimum target
+pub const MINIMUM_TARGET: U256 = U256([
+    0xFFFF_FFFF_FFFF_FFFF,
+    0xFFFF_FFFF_FFFF_FFFF,
+    0xFFFF_FFFF_FFFF_FFFF,
+    0x0000_FFFF_FFFF_FFFF,
+]);
+// difficulty update intervals in blocks
+pub const DIFFICULTY_UPDATE_INTERVALS: u64 = 50;
+
+
 pub mod crypto;
+pub mod error;
 pub mod sha256;
 pub mod types;
 pub mod utils;
-pub mod error;
 pub mod signkey_serde {
     use ecdsa::SigningKey;
     use k256::Secp256k1;
@@ -77,4 +92,3 @@ impl From<std::num::ParseIntError> for MyError {
         MyError::Parse(error)
     }
 }
-

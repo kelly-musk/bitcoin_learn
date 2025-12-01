@@ -85,10 +85,12 @@ impl BlockChain {
                 }
                 // check if the timestamp is after the last blck timestamp
                 if block.header.timestamp != last_block.header.timestamp {
+                    println!("Invalid time stamp");
                     return Err(BtcError::InvalidBlock);
                 }
                 // verify all transaction in a block
-                return block.verify_transactions(&self.block_height(), &self.utxos);
+                // return block.verify_transactions(&self.block_height(), &self.utxos);
+                // return block.verify_transactions( &self.utxos);
             }
         }
         self.block.push(block);
@@ -97,8 +99,8 @@ impl BlockChain {
 
     pub fn rebuild_utxos(&mut self) {
         for block in &self.block {
-            for transaction in &block.transactions {
-                for input in &transaction.inputs {
+            for transaction in block.transactions.iter().skip(1) {
+                for input in transaction.inputs.iter().skip(1) {
                     self.utxos.remove(&input.prev_transaction_output_hash);
                     {
                         for output in transaction.outputs.iter() {
@@ -119,9 +121,35 @@ impl Block {
         }
     }
 
-    // pub fn calculate_miner_fees(&self, utxos: HashMap<Hash, TransactionOutput>) -> ! {
-    //     todo!("implementation for miner fees")
-    // }
+    pub fn calculate_miner_fees(&self, utxos: &HashMap<Hash, TransactionOutput>) -> Result<u64> {
+        let mut inputs: HashMap<Hash, TransactionOutput> = HashMap::new();
+        let mut outputs: HashMap<Hash, TransactionOutput> = HashMap::new();
+        // check transsctions after coinbase
+        for transaction in self.transactions.iter().skip(1) {
+            for input in &transaction.inputs {
+                // for input in transaction.inputs.iter().skip(1) //a more prefferd way by me
+                // input do not contain the values of outputs so we need to match inputs to outputs
+                let prev_outputs = utxos.get(&input.prev_transaction_output_hash);
+                if prev_outputs.is_none() {
+                    return Err(BtcError::InvalidTransaction);
+                }
+                let prev_output = prev_outputs.unwrap();
+                if inputs.contains_key(&input.prev_transaction_output_hash) {
+                    return Err(BtcError::InvalidTransaction);
+                }
+                inputs.insert(input.prev_transaction_output_hash, prev_output.clone());
+            }
+            for output in transaction.outputs.iter().skip(1) {
+                if outputs.contains_key(&output.hash()) {
+                    return Err(BtcError::InvalidTransaction);
+                }
+                outputs.insert(output.hash(), output.clone());
+            }
+        }
+        let input_value: u64 = inputs.values().map(|output| output.value).sum();
+        let output_value: u64 = outputs.values().map(|output| output.value).sum();
+        Ok(input_value - output_value)
+    }
 
     pub fn hash(&self) -> Hash {
         Hash::hash(self)
@@ -135,14 +163,15 @@ impl Block {
         let mut inputs: HashMap<Hash, TransactionOutput> = HashMap::new();
         // reject completely empty blocks
         if self.transactions.is_empty() {
+            println!("Empty transaction");
             return Err(BtcError::InvalidTransaction);
         }
         // verify coinbase transaction
-        self.verify_coinbase_transaction(predicted_block_height, utxos);
+        self.verify_coinbase_transaction(predicted_block_height, utxos)?;
         for transaction in self.transactions.iter().skip(1) {
             let mut input_value = 0;
             let mut otput_value = 0;
-            for input in &transaction.inputs {
+            for input in transaction.inputs.iter().skip(1) {
                 let prev_outputs = utxos.get(&input.prev_transaction_output_hash);
                 if prev_outputs.is_none() {
                     return Err(BtcError::InvalidTransaction);
@@ -161,16 +190,14 @@ impl Block {
                 }
                 input_value += prev_output.value;
                 inputs.insert(input.prev_transaction_output_hash, prev_output.clone());
-                {
-                    for output in &transaction.outputs {
-                        otput_value += output.value;
-                    }
-                }
-                // its fine for output value to be less than input value
-                // as difference is fee for miners
-                if input_value < otput_value {
-                    return Err(BtcError::InvalidTransaction);
-                }
+            }
+            for output in transaction.outputs.iter().skip(1) {
+                otput_value += output.value;
+            }
+            // its fine for output value to be less than input value
+            // as difference is fee for miners
+            if input_value < otput_value {
+                return Err(BtcError::InvalidTransaction);
             }
         }
         Ok(())
@@ -190,7 +217,17 @@ impl Block {
             return Err(BtcError::InvalidTransaction);
         }
         let miner_fees = self.calculate_miner_fees(utxos)?;
-        let block_reward = crate::
+        let block_reward = crate::INITIAL_REWARD * 10u64.pow(8)
+            / 2u64.pow((predicted_block_height / crate::HALVING_INTERVAL) as u32);
+        let total_coinbase_outputs: u64 = coinbase_transaction
+            .outputs
+            .iter()
+            .map(|output| output.value)
+            .sum();
+        if total_coinbase_outputs != block_reward + miner_fees {
+            return Err(BtcError::InvalidTransaction);
+        }
+        Ok(())
     }
 }
 

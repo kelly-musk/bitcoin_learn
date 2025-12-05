@@ -108,7 +108,7 @@ impl BlockChain {
         }
         let block_transaction: HashSet<_> = blocks.transactions.iter().map(|tx| tx.hash()).collect();
         self.mempool
-            .retain(|(_, tx)| !block_transaction.contains(&tx.hash()));
+            .retain(| tx| !block_transaction.contains(&tx.hash()));
         self.blocks.push(blocks);
         self.try_adjust_target();
         Ok(())

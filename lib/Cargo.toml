@@ -17,3 +17,7 @@ bytes = "1.11.0"
 rand = "0.8"
 rand_core = "0.6"
 thiserror = "2.0.17"
+bitcoin = { version = "0.32.7", features = ["actual-serde", "base64", "bitcoinconsensus", "bitcoinconsensus-std", "ordered", "rand", "rand-std", "secp-lowmemory", "serde"] }
+features = "0.10.0"
+full = "0.3.0"
+bigdecimal = "0.4.9"

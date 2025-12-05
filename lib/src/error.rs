@@ -13,7 +13,7 @@ pub enum BtcError {
     #[error("Invalid TransactionInput")]
     InvalidTransactionInput,
     #[error("Invalid MerkeleRoot")]
-    InvalidMerkeleRoot,
+    InvalidMerkleRoot,
     #[error("Invalid BlockChain")]
     InvalidBlockChain,
     #[error("Invalid Hash")]

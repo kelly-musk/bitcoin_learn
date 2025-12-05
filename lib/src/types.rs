@@ -3,14 +3,18 @@ use crate::crypto::{PublicKey, Signature};
 use crate::error::{BtcError, Result};
 use crate::sha256::Hash;
 use crate::utils::MerkleRoot;
+use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlockChain {
-    pub block: Vec<Block>,
-    pub utxos: HashMap<Hash, TransactionOutput>,
+    blocks: Vec<Block>,
+    target: U256,
+    utxos: HashMap<Hash, TransactionOutput>,
+    #[serde(default, skip_serializing)]
+    mempool: Vec<Transaction>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Block {
@@ -19,13 +23,13 @@ pub struct Block {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BlockHeader {
-    /// Timestap of the block
+    /// Timestap of the blocks
     pub timestamp: DateTime<Utc>,
-    /// Nonce used to mine block
+    /// Nonce used to mine blocks
     pub nonce: u64,
-    /// Hash of the prev block
+    /// Hash of the prev blocks
     pub prev_block_hash: Hash,
-    /// Markl root of the block transaction
+    /// Markl root of the blocks transaction
     pub markle_root: MerkleRoot,
     /// Target
     pub target: U256,
@@ -53,63 +57,128 @@ impl BlockChain {
     pub fn new() -> Self {
         BlockChain {
             utxos: HashMap::new(),
-            block: vec![],
+            target: crate::MINIMUM_TARGET,
+            blocks: vec![],
+            mempool: vec![],
         }
     }
-    pub fn add_blocks(&mut self, block: Block) -> Result<()> {
-        // check if block is valid
-        if self.block.is_empty() {
-            // if this is my first block check if the block's
-            // prev's_block_hash is all zeros
-            if block.header.prev_block_hash != Hash::zero() {
-                println!("Zero Hash");
+
+    pub fn hash(&self) -> Hash {
+        Hash::hash(self)
+    }
+
+    pub fn add_block(
+        &mut self,
+        blocks: Block,
+    ) -> Result<()> {
+        // check if the blocks is valid
+        if self.blocks.is_empty() {
+            // if this is the first blocks, check if the
+            // blocks's prev_block_hash is all zeroes
+            if blocks.header.prev_block_hash != Hash::zero() {
+                println!("zero hash");
                 return Err(BtcError::InvalidBlock);
-            } else {
-                // if this is not the first bloclk check the
-                // block's prev_block_hash is the last hash
-                let last_block = self.block.last().unwrap();
-                if block.header.prev_block_hash != last_block.hash() {
-                    println!("prev hash is wrong ");
-                    return Err(BtcError::InvalidBlock);
-                }
-                // check if block hash is lesser than the target
-                if !block.header.hash().matches_target(block.header.target) {
-                    println!("dose not match target");
-                    return Err(BtcError::InvalidBlock);
-                }
-                //check if the block merkle root is correct
-                let calculated_merkle_root = MerkleRoot::calculate(&block.transactions);
-                if calculated_merkle_root != block.header.markle_root {
-                    println!("Invalid merkle root");
-                    return Err(BtcError::InvalidMerkeleRoot);
-                }
-                // check if the timestamp is after the last blck timestamp
-                if block.header.timestamp != last_block.header.timestamp {
-                    println!("Invalid time stamp");
-                    return Err(BtcError::InvalidBlock);
-                }
-                // verify all transaction in a block
-                // return block.verify_transactions(&self.block_height(), &self.utxos);
-                // return block.verify_transactions( &self.utxos);
             }
+        } else {
+            // if this is not the first blocks, check if the
+            // blocks's prev_block_hash is the hash of the lastblock
+            let last_block = self.blocks.last().unwrap();
+            if blocks.header.prev_block_hash != last_block.hash() {
+                println!("prev hash is wrong");
+                return Err(BtcError::InvalidBlock);
+            }
+            // check if the blocks's hash is less than the target
+            if !blocks.header.hash().matches_target(blocks.header.target) {
+                println!("does not match target");
+                return Err(BtcError::InvalidBlock);
+            }
+            // check if the blocks's merkle root is correct
+            let calculated_merkle_root = MerkleRoot::calculate(&blocks.transactions);
+            if calculated_merkle_root != blocks.header.markle_root {
+                println!("invalid merkle root");
+                return Err(BtcError::InvalidMerkleRoot);
+            }
+            // check if the blocks's timestamp is after the
+            // last blocks's timestamp
+            if blocks.header.timestamp <= last_block.header.timestamp {
+                return Err(BtcError::InvalidBlock);
+            }
+            // Verify all transactions in the blocks
+            blocks.verify_transactions(self.block_height(), &self.utxos)?;
         }
-        self.block.push(block);
+        let block_transaction: HashSet<_> = blocks.transactions.iter().map(|tx| tx.hash()).collect();
+        self.mempool
+            .retain(|(_, tx)| !block_transaction.contains(&tx.hash()));
+        self.blocks.push(blocks);
+        self.try_adjust_target();
         Ok(())
     }
 
+    pub fn block_height(&self) -> u64 {
+        self.blocks.len() as u64
+    }
+
     pub fn rebuild_utxos(&mut self) {
-        for block in &self.block {
-            for transaction in block.transactions.iter().skip(1) {
+        for blocks in &self.blocks {
+            for transaction in blocks.transactions.iter().skip(1) {
                 for input in transaction.inputs.iter().skip(1) {
                     self.utxos.remove(&input.prev_transaction_output_hash);
-                    {
-                        for output in transaction.outputs.iter() {
-                            self.utxos.insert(transaction.hash(), output.clone());
-                        }
-                    }
+                }
+                for output in transaction.outputs.iter() {
+                    self.utxos.insert(transaction.hash(), output.clone());
                 }
             }
         }
+    }
+
+    pub fn try_adjust_target(&mut self) {
+        if self.blocks.is_empty() {
+            return;
+        }
+        if self.blocks.len() % crate::DIFFICULTY_UPDATE_INTERVALS as usize != 0 {
+            return;
+        }
+        // measure the time that it took to mine the last crate::DIFFICULTY_UPDATE_INTERVALS with chrono
+        let start_time = self.blocks[self.blocks.len() - crate::DIFFICULTY_UPDATE_INTERVALS as usize]
+            .header
+            .timestamp;
+        let end_time = self.blocks.last().unwrap().header.timestamp;
+        // diff in time for minnnig
+        let time_diff = start_time - end_time;
+        // time diff in second
+        let time_diff_seconds = time_diff.num_seconds();
+        // calculate the ideal number of second
+        let target_seconds = crate::IDEAL_BLOCK_TIME * crate::DIFFICULTY_UPDATE_INTERVALS;
+        //multiply the current target by actual time divided by ideal time
+        let new_target = BigDecimal::parse_bytes(&self.target.to_string().as_bytes(), 10)
+            .expect("Bug: impossible")
+            * (BigDecimal::from(time_diff_seconds) / BigDecimal::from(target_seconds));
+        let new_target_str = new_target
+            .to_string()
+            .split('.')
+            .next()
+            .expect("Bug: impossible")
+            .to_owned();
+        let new_target = U256::from_str_radix(&new_target_str, 10).expect("Bug: impossible");
+        //clamp new_target to be within the range of 4 * self.target and self.target / 4
+        let new_target = if new_target < self.target / 4 {
+            self.target / 4
+        } else if new_target > self.target * 4 {
+            self.target * 4
+        } else {
+            new_target
+        };
+
+        // if the new_target is more than the minimum target set it to the minimum target
+        self.target = new_target.min(crate::MINIMUM_TARGET);
+    }
+
+    pub fn utxos(&self)-> &HashMap<Hash, TransactionOutput> {
+        &self.utxos
+    }
+
+    pub fn blocks(&self) -> impl Iterator<Item = &Block> {
+        self.blocks.iter()
     }
 }
 
@@ -177,7 +246,7 @@ impl Block {
                     return Err(BtcError::InvalidTransaction);
                 }
                 let prev_output = prev_outputs.unwrap();
-                // prevents same-block double-spending
+                // prevents same-blocks double-spending
                 if inputs.contains_key(&input.prev_transaction_output_hash) {
                     return Err(BtcError::InvalidTransaction);
                 }
@@ -208,7 +277,7 @@ impl Block {
         predicted_block_height: u64,
         utxos: &HashMap<Hash, TransactionOutput>,
     ) -> Result<()> {
-        //coinbase transaction is the first transaction in the block
+        //coinbase transaction is the first transaction in the blocks
         let coinbase_transaction = &self.transactions[0];
         if coinbase_transaction.inputs.len() != 0 {
             return Err(BtcError::InvalidTransaction);
@@ -250,6 +319,24 @@ impl BlockHeader {
 
     pub fn hash(&self) -> Hash {
         Hash::hash(self)
+    }
+    pub fn mine(&mut self, steps: usize) -> bool {
+        // if the blocks already matches target return early
+        if self.hash().matches_target(self.target) {
+            return true;
+        }
+        for _ in 0..steps {
+            if let Some(new_nonce) = self.nonce.checked_add(1) {
+                self.nonce = new_nonce;
+            } else {
+                self.nonce = 0;
+                self.timestamp = Utc::now();
+            }
+            if self.hash().matches_target(self.target) {
+                return true;
+            }
+        }
+        false
     }
 }
 

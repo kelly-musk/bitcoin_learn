@@ -20,6 +20,7 @@ chrono = { version = "0.4.42", features = ["serde"] }
 ecdsa = { version = "0.16.9", features = ["signing", "verifying", "serde", "pem"] }
 k256 = { version = "0.13.4", features = ["serde", "pem"] }
 hex = "0.4.3"
+bigdecimal = "0.4.9"
 
 [workspace]
 resolver ="2"

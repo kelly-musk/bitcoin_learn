@@ -67,10 +67,7 @@ impl BlockChain {
         Hash::hash(self)
     }
 
-    pub fn add_block(
-        &mut self,
-        blocks: Block,
-    ) -> Result<()> {
+    pub fn add_block(&mut self, blocks: Block) -> Result<()> {
         // check if the blocks is valid
         if self.blocks.is_empty() {
             // if this is the first blocks, check if the
@@ -106,9 +103,10 @@ impl BlockChain {
             // Verify all transactions in the blocks
             blocks.verify_transactions(self.block_height(), &self.utxos)?;
         }
-        let block_transaction: HashSet<_> = blocks.transactions.iter().map(|tx| tx.hash()).collect();
+        let block_transaction: HashSet<_> =
+            blocks.transactions.iter().map(|tx| tx.hash()).collect();
         self.mempool
-            .retain(| tx| !block_transaction.contains(&tx.hash()));
+            .retain(|tx| !block_transaction.contains(&tx.hash()));
         self.blocks.push(blocks);
         self.try_adjust_target();
         Ok(())
@@ -139,7 +137,8 @@ impl BlockChain {
             return;
         }
         // measure the time that it took to mine the last crate::DIFFICULTY_UPDATE_INTERVALS with chrono
-        let start_time = self.blocks[self.blocks.len() - crate::DIFFICULTY_UPDATE_INTERVALS as usize]
+        let start_time = self.blocks
+            [self.blocks.len() - crate::DIFFICULTY_UPDATE_INTERVALS as usize]
             .header
             .timestamp;
         let end_time = self.blocks.last().unwrap().header.timestamp;
@@ -173,7 +172,7 @@ impl BlockChain {
         self.target = new_target.min(crate::MINIMUM_TARGET);
     }
 
-    pub fn utxos(&self)-> &HashMap<Hash, TransactionOutput> {
+    pub fn utxos(&self) -> &HashMap<Hash, TransactionOutput> {
         &self.utxos
     }
 
